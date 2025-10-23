@@ -1,0 +1,707 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #2196F3;
+    --secondary-color: #4CAF50;
+    --danger-color: #f44336;
+    --text-color: #333;
+    --bg-color: #f5f5f5;
+    --card-bg: #ffffff;
+    --border-color: #e0e0e0;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    --header-height: 70px;
+    --nav-height: 60px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Login Screen */
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+}
+
+.login-box {
+    background: var(--card-bg);
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+}
+
+.login-box h1 {
+    color: var(--primary-color);
+    margin-bottom: 10px;
+    font-size: 28px;
+}
+
+.login-box p {
+    color: #666;
+    margin-bottom: 30px;
+}
+
+.login-form input {
+    width: 100%;
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 16px;
+    text-align: center;
+    letter-spacing: 4px;
+}
+
+.login-form input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.login-form button {
+    width: 100%;
+    padding: 15px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.login-form button:hover {
+    background: #1976D2;
+}
+
+.hint {
+    margin-top: 15px;
+    font-size: 12px;
+    color: #999;
+}
+
+/* Header */
+header {
+    background: var(--card-bg);
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: var(--header-height);
+}
+
+.header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+    height: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 {
+    color: var(--primary-color);
+    font-size: 24px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+#currentDate {
+    font-size: 14px;
+    color: #666;
+}
+
+.logout-btn {
+    padding: 8px 20px;
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.3s;
+}
+
+.logout-btn:hover {
+    background: #d32f2f;
+}
+
+/* Navigation */
+.main-nav {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+    padding: 10px 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    position: sticky;
+    top: var(--header-height);
+    z-index: 99;
+    scrollbar-width: thin;
+}
+
+.main-nav::-webkit-scrollbar {
+    height: 4px;
+}
+
+.main-nav::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+.nav-btn {
+    padding: 10px 20px;
+    margin: 0 5px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+    transition: all 0.3s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-btn:hover {
+    background: var(--bg-color);
+}
+
+.nav-btn.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.nav-btn span {
+    font-size: 18px;
+}
+
+/* Main Content */
+.content-area {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.view {
+    display: none;
+    animation: fadeIn 0.3s;
+}
+
+.view.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Dashboard */
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.dashboard-header h2 {
+    font-size: 28px;
+    color: var(--text-color);
+}
+
+.progress-ring {
+    position: relative;
+    width: 120px;
+    height: 120px;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.progress-text span {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--secondary-color);
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.dashboard-card {
+    background: var(--card-bg);
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.dashboard-card h3 {
+    margin-bottom: 15px;
+    color: var(--primary-color);
+    font-size: 18px;
+}
+
+/* Date Navigation */
+.date-navigation, .week-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding: 15px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.date-navigation button, .week-navigation button {
+    padding: 10px 20px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.3s;
+}
+
+.date-navigation button:hover, .week-navigation button:hover {
+    background: #1976D2;
+}
+
+.date-navigation span, .week-navigation span {
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text-color);
+}
+
+/* Content Cards */
+.schedule-content, .weekly-content, .gym-content, .ig-content,
+.habits-content, .nutrition-content, .hooks-content {
+    background: var(--card-bg);
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+}
+
+.task-group {
+    margin-bottom: 25px;
+}
+
+.task-group h3 {
+    color: var(--primary-color);
+    margin-bottom: 12px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.task-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    transition: background 0.3s;
+}
+
+.task-item:hover {
+    background: #e8f4f8;
+}
+
+.task-item input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.task-item label {
+    flex: 1;
+    cursor: pointer;
+    line-height: 1.5;
+}
+
+.task-item.completed label {
+    text-decoration: line-through;
+    color: #999;
+}
+
+/* Week Card */
+.week-card {
+    margin-bottom: 20px;
+}
+
+.week-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 20px;
+    border-radius: 8px 8px 0 0;
+}
+
+.week-body {
+    background: var(--card-bg);
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 0 0 8px 8px;
+}
+
+.week-section {
+    margin-bottom: 15px;
+    padding: 15px;
+    background: var(--bg-color);
+    border-radius: 6px;
+}
+
+.week-section h4 {
+    color: var(--primary-color);
+    margin-bottom: 8px;
+    font-size: 16px;
+}
+
+/* Gym Program */
+.exercise-card {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    border-left: 4px solid var(--secondary-color);
+}
+
+.exercise-card h4 {
+    color: var(--text-color);
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.exercise-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.exercise-detail {
+    padding: 8px;
+    background: var(--card-bg);
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.exercise-detail strong {
+    color: var(--primary-color);
+}
+
+/* Nutrition */
+.nutrition-item {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+.nutrition-item h4 {
+    color: var(--primary-color);
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+/* Hooks */
+.hook-card {
+    margin-bottom: 15px;
+    padding: 20px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-color);
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.hook-card:hover {
+    transform: translateX(5px);
+}
+
+.hook-card h4 {
+    color: var(--text-color);
+    margin-bottom: 8px;
+    font-size: 16px;
+}
+
+.hook-card p {
+    color: #666;
+    font-size: 14px;
+}
+
+/* Settings */
+.settings-content {
+    max-width: 600px;
+}
+
+.setting-group {
+    background: var(--card-bg);
+    padding: 25px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+}
+
+.setting-group h3 {
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+.setting-group input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.setting-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.setting-group button {
+    padding: 12px 24px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    transition: background 0.3s;
+}
+
+.setting-group button:hover {
+    background: #1976D2;
+}
+
+.danger-btn {
+    background: var(--danger-color) !important;
+}
+
+.danger-btn:hover {
+    background: #d32f2f !important;
+}
+
+.setting-group p {
+    margin-bottom: 5px;
+    color: #666;
+}
+
+/* Habit Streak */
+.streak-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.streak-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background: var(--bg-color);
+    border-radius: 6px;
+}
+
+.streak-count {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--secondary-color);
+}
+
+/* Stats */
+.stats-grid {
+    display: grid;
+    gap: 15px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px;
+    background: var(--bg-color);
+    border-radius: 6px;
+}
+
+.stat-value {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+/* Instagram Calendar */
+.ig-task {
+    margin-bottom: 15px;
+    padding: 15px;
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+.ig-task h4 {
+    color: var(--primary-color);
+    margin-bottom: 8px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 20px;
+    }
+
+    .header-actions {
+        gap: 10px;
+    }
+
+    #currentDate {
+        display: none;
+    }
+
+    .main-nav {
+        padding: 5px 0;
+    }
+
+    .nav-btn {
+        padding: 8px 15px;
+        font-size: 12px;
+    }
+
+    .nav-btn span {
+        font-size: 16px;
+    }
+
+    .content-area {
+        padding: 15px;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .dashboard-header h2 {
+        font-size: 24px;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .date-navigation, .week-navigation {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .date-navigation button, .week-navigation button {
+        width: 100%;
+    }
+
+    .exercise-details {
+        grid-template-columns: 1fr;
+    }
+
+    .login-box {
+        padding: 30px 20px;
+    }
+
+    .login-box h1 {
+        font-size: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-content {
+        padding: 0 15px;
+    }
+
+    header h1 {
+        font-size: 18px;
+    }
+
+    .logout-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .schedule-content, .weekly-content, .gym-content, .ig-content,
+    .habits-content, .nutrition-content, .hooks-content {
+        padding: 15px;
+    }
+
+    .task-item {
+        padding: 10px;
+    }
+
+    .dashboard-card {
+        padding: 20px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .main-nav, .logout-btn, .date-navigation button, .week-navigation button {
+        display: none;
+    }
+
+    body {
+        background: white;
+    }
+
+    .content-area {
+        max-width: 100%;
+    }
+}
