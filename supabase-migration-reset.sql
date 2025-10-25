@@ -58,11 +58,12 @@ CREATE TABLE measurements (
   weight DECIMAL(5,2),
   body_fat_percentage DECIMAL(4,2),
   muscle_mass DECIMAL(5,2),
-  chest_cm DECIMAL(5,2),
-  waist_cm DECIMAL(5,2),
-  hips_cm DECIMAL(5,2),
-  arms_cm DECIMAL(5,2),
-  thighs_cm DECIMAL(5,2),
+  chest DECIMAL(5,2),
+  waist DECIMAL(5,2),
+  hips DECIMAL(5,2),
+  arms DECIMAL(5,2),
+  thighs DECIMAL(5,2),
+  neck DECIMAL(5,2),
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
