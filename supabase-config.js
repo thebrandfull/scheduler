@@ -7,15 +7,9 @@
 // 4. Replace the values below OR set environment variables
 
 export const supabaseConfig = {
-  url: import.meta.env.VITE_SUPABASE_URL || 'YOUR_SUPABASE_URL',
-  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY'
+  url: 'https://lftriblowcphjvzesflh.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxmdHJpYmxvd2NwaGp2emVzZmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEzNTgwMDEsImV4cCI6MjA3NjkzNDAwMX0.XxsjMdpv_tscdroOn78N78CsMPbSpsnOKg7TRH3Mv2w'
 };
-
-// For GitHub Pages deployment, you can also hardcode the values:
-// export const supabaseConfig = {
-//   url: 'https://xxxxxxxxxxxxx.supabase.co',
-//   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
-// };
 
 // Supabase Storage Buckets
 export const STORAGE_BUCKETS = {
