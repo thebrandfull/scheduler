@@ -4,12 +4,9 @@
 
 1. **Open this link**: https://supabase.com/dashboard/project/lftriblowcphjvzesflh/sql/new
 
-2. **Copy ALL the SQL below** (or from `supabase-schema.sql` file):
-
-```sql
--- Just copy from supabase-schema.sql file in your repository
--- Or click the file in GitHub and copy all 400+ lines
-```
+2. **Copy ALL the SQL** from `supabase-migration-reset.sql` file:
+   - This will drop and recreate all tables (fresh start)
+   - Or use `supabase-schema.sql` if tables don't exist yet
 
 3. **Paste into SQL Editor** and click **"Run"**
 
@@ -36,7 +33,7 @@
 
 3. **Wait 2 minutes** for deployment
 
-4. **Open your app**: https://thebrandfull.github.io/scheduler/index-v2.html
+4. **Open your app**: https://thebrandfull.github.io/scheduler/
 
 ## Step 4: Test It!
 

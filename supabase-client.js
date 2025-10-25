@@ -1,5 +1,6 @@
-// Supabase Client Wrapper
-// Handles all database operations with error handling and caching
+// Feb 1 Game Plan V2.1 - Upgraded Supabase Client
+// NO CACHE - Everything saves directly to database
+// Organized workouts by day, meals by type
 
 import { supabaseConfig, APP_CONFIG, STORAGE_BUCKETS } from './supabase-config.js';
 
@@ -7,7 +8,6 @@ class SupabaseClient {
     constructor() {
         this.supabase = null;
         this.currentUser = null;
-        this.cache = new Map();
         this.initialized = false;
     }
 
@@ -15,24 +15,19 @@ class SupabaseClient {
         if (this.initialized) return;
 
         try {
-            // Import Supabase CDN
             const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-
             this.supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey);
 
-            // Check current session
             const { data: { session } } = await this.supabase.auth.getSession();
             if (session) {
                 this.currentUser = session.user;
             }
 
-            // Listen for auth changes
             this.supabase.auth.onAuthStateChange((event, session) => {
                 if (event === 'SIGNED_IN') {
                     this.currentUser = session.user;
                 } else if (event === 'SIGNED_OUT') {
                     this.currentUser = null;
-                    this.clearCache();
                 }
             });
 
@@ -51,11 +46,8 @@ class SupabaseClient {
         const { data, error } = await this.supabase.auth.signUp({
             email,
             password,
-            options: {
-                data: userData
-            }
+            options: { data: userData }
         });
-
         if (error) throw error;
         return data;
     }
@@ -65,7 +57,6 @@ class SupabaseClient {
             email,
             password
         });
-
         if (error) throw error;
         this.currentUser = data.user;
         return data;
@@ -74,11 +65,8 @@ class SupabaseClient {
     async signInWithOTP(email) {
         const { data, error } = await this.supabase.auth.signInWithOtp({
             email,
-            options: {
-                emailRedirectTo: window.location.origin
-            }
+            options: { emailRedirectTo: window.location.origin }
         });
-
         if (error) throw error;
         return data;
     }
@@ -87,19 +75,17 @@ class SupabaseClient {
         const { error } = await this.supabase.auth.signOut();
         if (error) throw error;
         this.currentUser = null;
-        this.clearCache();
     }
 
     async getCurrentUser() {
         if (this.currentUser) return this.currentUser;
-
         const { data: { user } } = await this.supabase.auth.getUser();
         this.currentUser = user;
         return user;
     }
 
     // =====================================================
-    // USER PROFILE
+    // USER PROFILE - Always fetch from DB
     // =====================================================
 
     async createUserProfile(profileData) {
@@ -117,16 +103,10 @@ class SupabaseClient {
             .single();
 
         if (error) throw error;
-        this.cache.set('user_profile', data);
         return data;
     }
 
     async getUserProfile() {
-        // Check cache first
-        if (this.cache.has('user_profile')) {
-            return this.cache.get('user_profile');
-        }
-
         const user = await this.getCurrentUser();
         if (!user) return null;
 
@@ -136,8 +116,7 @@ class SupabaseClient {
             .eq('id', user.id)
             .single();
 
-        if (error && error.code !== 'PGRST116') throw error; // Ignore not found errors
-        if (data) this.cache.set('user_profile', data);
+        if (error && error.code !== 'PGRST116') throw error;
         return data;
     }
 
@@ -153,31 +132,25 @@ class SupabaseClient {
             .single();
 
         if (error) throw error;
-        this.cache.set('user_profile', data);
         return data;
     }
 
     // =====================================================
-    // DAILY COMPLETIONS
+    // DAILY COMPLETIONS - Direct DB access only
     // =====================================================
 
     async getDailyCompletions(date) {
         const user = await this.getCurrentUser();
         if (!user) return [];
 
-        const cacheKey = `completions_${date}`;
-        if (this.cache.has(cacheKey)) {
-            return this.cache.get(cacheKey);
-        }
-
         const { data, error } = await this.supabase
             .from('daily_completions')
             .select('*')
             .eq('user_id', user.id)
-            .eq('task_date', date);
+            .eq('task_date', date)
+            .order('created_at', { ascending: true });
 
         if (error) throw error;
-        this.cache.set(cacheKey, data || []);
         return data || [];
     }
 
@@ -185,7 +158,7 @@ class SupabaseClient {
         const user = await this.getCurrentUser();
         if (!user) throw new Error('No authenticated user');
 
-        const { data, error} = await this.supabase
+        const { data, error } = await this.supabase
             .from('daily_completions')
             .upsert({
                 user_id: user.id,
@@ -202,14 +175,11 @@ class SupabaseClient {
             .single();
 
         if (error) throw error;
-
-        // Clear cache for this date
-        this.cache.delete(`completions_${taskDate}`);
         return data;
     }
 
     // =====================================================
-    // MEASUREMENTS
+    // MEASUREMENTS - Direct DB
     // =====================================================
 
     async getMeasurements(limit = 30) {
@@ -235,46 +205,48 @@ class SupabaseClient {
             .from('measurements')
             .insert({
                 user_id: user.id,
+                measured_at: new Date().toISOString(),
                 ...measurementData
             })
             .select()
             .single();
 
         if (error) throw error;
-        this.cache.delete('recent_measurements');
         return data;
     }
 
     // =====================================================
-    // PROGRESS PHOTOS
+    // PROGRESS PHOTOS - Direct to Storage
     // =====================================================
 
     async uploadProgressPhoto(file, photoType = 'front', notes = '') {
         const user = await this.getCurrentUser();
         if (!user) throw new Error('No authenticated user');
 
-        // Upload to storage
         const timestamp = new Date().getTime();
-        const fileName = `${user.id}/${timestamp}_${photoType}.${file.name.split('.').pop()}`;
+        const ext = file.name.split('.').pop();
+        const fileName = `${user.id}/${timestamp}_${photoType}.${ext}`;
 
         const { data: uploadData, error: uploadError } = await this.supabase.storage
             .from(STORAGE_BUCKETS.PROGRESS_PHOTOS)
-            .upload(fileName, file);
+            .upload(fileName, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
 
         if (uploadError) throw uploadError;
 
-        // Get public URL
         const { data: { publicUrl } } = this.supabase.storage
             .from(STORAGE_BUCKETS.PROGRESS_PHOTOS)
             .getPublicUrl(fileName);
 
-        // Save metadata to database
         const { data, error } = await this.supabase
             .from('progress_photos')
             .insert({
                 user_id: user.id,
                 photo_url: publicUrl,
                 photo_type: photoType,
+                taken_at: new Date().toISOString(),
                 notes
             })
             .select()
@@ -300,7 +272,7 @@ class SupabaseClient {
     }
 
     // =====================================================
-    // GYM LOGS
+    // GYM LOGS - Organized by workout day
     // =====================================================
 
     async addGymLog(workoutData) {
@@ -311,6 +283,7 @@ class SupabaseClient {
             .from('gym_logs')
             .insert({
                 user_id: user.id,
+                workout_date: workoutData.workout_date || new Date().toISOString().split('T')[0],
                 ...workoutData
             })
             .select()
@@ -335,8 +308,24 @@ class SupabaseClient {
         return data || [];
     }
 
+    async getGymLogsByDateRange(startDate, endDate) {
+        const user = await this.getCurrentUser();
+        if (!user) return [];
+
+        const { data, error } = await this.supabase
+            .from('gym_logs')
+            .select('*')
+            .eq('user_id', user.id)
+            .gte('workout_date', startDate)
+            .lte('workout_date', endDate)
+            .order('workout_date', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    }
+
     // =====================================================
-    // JOURNAL ENTRIES
+    // JOURNAL ENTRIES - Direct DB
     // =====================================================
 
     async getJournalEntry(date) {
@@ -375,7 +364,7 @@ class SupabaseClient {
     }
 
     // =====================================================
-    // INSTAGRAM POSTS
+    // INSTAGRAM POSTS - Direct DB
     // =====================================================
 
     async addInstagramPost(postData) {
@@ -386,6 +375,7 @@ class SupabaseClient {
             .from('instagram_posts')
             .insert({
                 user_id: user.id,
+                post_date: postData.post_date || new Date().toISOString().split('T')[0],
                 ...postData
             })
             .select()
@@ -410,8 +400,24 @@ class SupabaseClient {
         return data || [];
     }
 
+    async updateInstagramPost(postId, updates) {
+        const user = await this.getCurrentUser();
+        if (!user) throw new Error('No authenticated user');
+
+        const { data, error } = await this.supabase
+            .from('instagram_posts')
+            .update(updates)
+            .eq('id', postId)
+            .eq('user_id', user.id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    }
+
     // =====================================================
-    // DAILY METRICS
+    // DAILY METRICS - Direct DB
     // =====================================================
 
     async getDailyMetrics(date) {
@@ -450,7 +456,7 @@ class SupabaseClient {
     }
 
     // =====================================================
-    // WEEKLY REVIEWS
+    // WEEKLY REVIEWS - Direct DB
     // =====================================================
 
     async getWeeklyReview(weekNumber) {
@@ -490,7 +496,7 @@ class SupabaseClient {
     }
 
     // =====================================================
-    // HABIT STREAKS
+    // HABIT STREAKS - Direct DB calculation
     // =====================================================
 
     async updateHabitStreak(habitName, completed, date) {
@@ -556,14 +562,6 @@ class SupabaseClient {
 
         if (error) throw error;
         return data || [];
-    }
-
-    // =====================================================
-    // UTILITY METHODS
-    // =====================================================
-
-    clearCache() {
-        this.cache.clear();
     }
 
     isAuthenticated() {

@@ -1,788 +1,853 @@
-// Feb 1 Game Plan Tracker App
-// localStorage keys
-const STORAGE_KEYS = {
-    PIN: 'feb1_pin',
-    AUTH: 'feb1_auth',
-    PROGRESS: 'feb1_progress',
-    CURRENT_DATE: 'feb1_currentDate',
-    CURRENT_WEEK: 'feb1_currentWeek',
-    HABITS: 'feb1_habits',
-    IG_DATE: 'feb1_igDate',
-    HABIT_DATE: 'feb1_habitDate'
+// Feb 1 Game Plan V3.0 - Complete Integration
+// - Supabase for all data (no cache)
+// - DeepSeek AI for motivation & advice
+// - Organized workouts by day
+// - Organized nutrition by meal
+// - Starts TODAY
+
+import { db } from './supabase-client.js';
+import { DateUtils, FitnessCalculator, ProgressCalculator } from './utils.js';
+import { APP_CONFIG } from './supabase-config.js';
+import { getTodaysWorkout, WEEKLY_SCHEDULE } from './workout-program.js';
+import { getDailyMealPlan, MEAL_PLAN_TEMPLATE } from './nutrition-plan.js';
+import { getAIMotivation, getWorkoutAdvice, analyzeProgress } from './deepseek-ai.js';
+
+const state = {
+    currentView: 'dashboard',
+    currentDate: DateUtils.getToday(),
+    currentWeek: 0,
+    user: null,
+    profile: null,
+    onboardingData: {},
+    calculatedMetrics: null,
+    aiCache: {}
 };
 
-// Default PIN
-const DEFAULT_PIN = '1234';
+// =====================================================
+// INITIALIZATION
+// =====================================================
 
-// Current state
-let currentView = 'dashboard';
-let currentDayIndex = 0;
-let currentWeekIndex = 0;
-let currentIGIndex = 0;
-let currentHabitIndex = 0;
-
-// Initialize app on load
-document.addEventListener('DOMContentLoaded', function() {
-    initializeApp();
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        showLoading();
+        await db.initialize();
+        await checkAuthState();
+    } catch (error) {
+        console.error('Init error:', error);
+        showError('Failed to initialize: ' + error.message);
+    } finally {
+        hideLoading();
+    }
 });
 
-function initializeApp() {
-    // Check if user is authenticated
-    if (isAuthenticated()) {
-        showMainApp();
-        loadCurrentView();
-    } else {
-        showLoginScreen();
+async function checkAuthState() {
+    const user = await db.getCurrentUser();
+    if (!user) {
+        showAuthScreen();
+        return;
     }
-
-    // Initialize PIN if not set
-    if (!localStorage.getItem(STORAGE_KEYS.PIN)) {
-        localStorage.setItem(STORAGE_KEYS.PIN, DEFAULT_PIN);
+    state.user = user;
+    const profile = await db.getUserProfile();
+    if (!profile) {
+        showOnboardingScreen();
+        return;
     }
-
-    // Set current date
-    updateCurrentDate();
-
-    // Find today's index
-    findTodayIndex();
+    state.profile = profile;
+    await showMainApp();
 }
 
-function updateCurrentDate() {
-    const dateElement = document.getElementById('currentDate');
-    if (dateElement) {
-        const today = new Date();
-        const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
-        dateElement.textContent = today.toLocaleDateString('en-US', options);
-    }
+function showAuthScreen() {
+    hideAll();
+    document.getElementById('authScreen')?.classList.remove('hidden');
 }
 
-function findTodayIndex() {
-    const today = new Date().toISOString().split('T')[0];
+function showOnboardingScreen() {
+    hideAll();
+    document.getElementById('onboardingScreen')?.classList.remove('hidden');
+}
 
-    // Find today's index in daily schedule
-    const dailyIndex = gameplanData['Daily Schedule'].findIndex(day => day.Date === today);
-    if (dailyIndex !== -1) {
-        currentDayIndex = dailyIndex;
-        currentIGIndex = dailyIndex;
-        currentHabitIndex = dailyIndex;
+async function showMainApp() {
+    hideAll();
+    document.getElementById('mainApp')?.classList.remove('hidden');
+    await initializeMainApp();
+}
 
-        // Find current week
-        const currentDay = gameplanData['Daily Schedule'][dailyIndex];
-        if (currentDay && currentDay.Week !== undefined) {
-            currentWeekIndex = currentDay.Week;
+function hideAll() {
+    ['authScreen', 'onboardingScreen', 'mainApp'].forEach(id => {
+        document.getElementById(id)?.classList.add('hidden');
+    });
+}
+
+function showLoading() {
+    document.getElementById('loadingOverlay')?.classList.remove('hidden');
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay')?.classList.add('hidden');
+}
+
+function showError(message) {
+    alert(message);
+}
+
+// =====================================================
+// AUTHENTICATION
+// =====================================================
+
+window.showLogin = () => {
+    document.getElementById('loginForm').classList.remove('hidden');
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('magicLinkForm').classList.add('hidden');
+};
+
+window.showSignup = () => {
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('signupForm').classList.remove('hidden');
+    document.getElementById('magicLinkForm').classList.add('hidden');
+};
+
+window.showMagicLink = () => {
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('magicLinkForm').classList.remove('hidden');
+};
+
+window.handleLogin = async (event) => {
+    event.preventDefault();
+    try {
+        showLoading();
+        await db.signIn(
+            document.getElementById('loginEmail').value,
+            document.getElementById('loginPassword').value
+        );
+        await checkAuthState();
+    } catch (error) {
+        showError('Login failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+};
+
+window.handleSignup = async (event) => {
+    event.preventDefault();
+    const password = document.getElementById('signupPassword').value;
+    const confirm = document.getElementById('signupConfirm').value;
+    if (password !== confirm) {
+        showError('Passwords do not match');
+        return;
+    }
+    try {
+        showLoading();
+        await db.signUp(document.getElementById('signupEmail').value, password);
+        alert('Account created! Please sign in.');
+        showLogin();
+    } catch (error) {
+        showError('Signup failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+};
+
+window.handleMagicLink = async (event) => {
+    event.preventDefault();
+    try {
+        showLoading();
+        await db.signInWithOTP(document.getElementById('magicEmail').value);
+        alert('Magic link sent! Check your email.');
+        showLogin();
+    } catch (error) {
+        showError('Failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+};
+
+window.handleLogout = async () => {
+    if (confirm('Sign out?')) {
+        try {
+            showLoading();
+            await db.signOut();
+            location.reload();
+        } catch (error) {
+            showError('Logout failed');
+        } finally {
+            hideLoading();
         }
     }
-}
+};
 
-// Authentication
-function login() {
-    const pinInput = document.getElementById('pinInput');
-    const storedPin = localStorage.getItem(STORAGE_KEYS.PIN) || DEFAULT_PIN;
+// =====================================================
+// ONBOARDING
+// =====================================================
 
-    if (pinInput.value === storedPin) {
-        localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
-        showMainApp();
-        loadCurrentView();
-    } else {
-        alert('Incorrect PIN. Please try again.');
-        pinInput.value = '';
-    }
-}
-
-function logout() {
-    if (confirm('Are you sure you want to logout?')) {
-        localStorage.removeItem(STORAGE_KEYS.AUTH);
-        location.reload();
-    }
-}
-
-function isAuthenticated() {
-    return localStorage.getItem(STORAGE_KEYS.AUTH) === 'true';
-}
-
-function showLoginScreen() {
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('mainApp').classList.add('hidden');
-}
-
-function showMainApp() {
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('mainApp').classList.remove('hidden');
-}
-
-// View Management
-function switchView(viewName) {
-    currentView = viewName;
-
-    // Update nav buttons
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    document.querySelector(`[data-view="${viewName}"]`).classList.add('active');
-
-    // Update views
-    document.querySelectorAll('.view').forEach(view => {
-        view.classList.remove('active');
-    });
-
-    const viewMap = {
-        'dashboard': 'dashboardView',
-        'daily': 'dailyView',
-        'weekly': 'weeklyView',
-        'gym': 'gymView',
-        'instagram': 'instagramView',
-        'habits': 'habitsView',
-        'nutrition': 'nutritionView',
-        'hooks': 'hooksView',
-        'settings': 'settingsView'
-    };
-
-    document.getElementById(viewMap[viewName]).classList.add('active');
-
-    // Load view content
-    loadCurrentView();
-}
-
-function loadCurrentView() {
-    switch(currentView) {
-        case 'dashboard':
-            loadDashboard();
-            break;
-        case 'daily':
-            loadDailySchedule();
-            break;
-        case 'weekly':
-            loadWeeklyView();
-            break;
-        case 'gym':
-            loadGymProgram();
-            break;
-        case 'instagram':
-            loadInstagramCalendar();
-            break;
-        case 'habits':
-            loadHabits();
-            break;
-        case 'nutrition':
-            loadNutrition();
-            break;
-        case 'hooks':
-            loadHooks();
-            break;
-    }
-}
-
-// Dashboard
-function loadDashboard() {
-    loadCurrentWeekInfo();
-    loadTodayTasks();
-    loadHabitStreak();
-    loadQuickStats();
-    updateProgressRing();
-}
-
-function loadCurrentWeekInfo() {
-    const weekData = gameplanData['Week-by-Week'][currentWeekIndex];
-    const container = document.getElementById('currentWeekInfo');
-
-    if (!weekData) {
-        container.innerHTML = '<p>No week data available</p>';
-        return;
-    }
-
-    container.innerHTML = `
-        <div style="margin-bottom: 10px;">
-            <strong>Week ${weekData.Week}</strong> - ${weekData.Focus}
-        </div>
-        <div style="font-size: 14px; color: #666;">
-            ${weekData.Start} to ${weekData.End}
-        </div>
-    `;
-}
-
-function loadTodayTasks() {
-    const dailyData = gameplanData['Daily Schedule'][currentDayIndex];
-    const container = document.getElementById('todayTasks');
-
-    if (!dailyData) {
-        container.innerHTML = '<p>No tasks for today</p>';
-        return;
-    }
-
-    const tasks = [
-        { id: 'fitness', label: 'Fitness', value: dailyData.Fitness },
-        { id: 'cardio', label: 'Cardio', value: dailyData['Cardio/Steps'] },
-        { id: 'instagram', label: 'Instagram', value: dailyData.Instagram },
-        { id: 'career', label: 'Career', value: dailyData['Career/Clarity'] }
-    ];
-
-    let html = '<div style="max-height: 300px; overflow-y: auto;">';
-    tasks.forEach(task => {
-        const taskId = `today_${task.id}_${currentDayIndex}`;
-        const checked = getTaskStatus(taskId) ? 'checked' : '';
-        html += `
-            <div class="task-item ${checked ? 'completed' : ''}">
-                <input type="checkbox" id="${taskId}" ${checked}
-                       onchange="toggleTask('${taskId}', this.checked)">
-                <label for="${taskId}">
-                    <strong>${task.label}:</strong> ${task.value || 'N/A'}
-                </label>
-            </div>
-        `;
-    });
-    html += '</div>';
-
-    container.innerHTML = html;
-}
-
-function loadHabitStreak() {
-    const container = document.getElementById('habitStreak');
-    const streaks = calculateStreaks();
-
-    let html = '<div class="streak-container">';
-    html += `
-        <div class="streak-item">
-            <span>Current Streak:</span>
-            <span class="streak-count">${streaks.current} days</span>
-        </div>
-        <div class="streak-item">
-            <span>Longest Streak:</span>
-            <span class="streak-count">${streaks.longest} days</span>
-        </div>
-        <div class="streak-item">
-            <span>Completion Rate:</span>
-            <span class="stat-value">${streaks.rate}%</span>
-        </div>
-    `;
-    html += '</div>';
-
-    container.innerHTML = html;
-}
-
-function loadQuickStats() {
-    const container = document.getElementById('quickStats');
-    const progress = getProgress();
-
-    const completedTasks = Object.values(progress).filter(v => v === true).length;
-    const totalTasks = Object.keys(progress).length;
-
-    const dailySchedule = gameplanData['Daily Schedule'];
-    const totalDays = dailySchedule.length;
-    const daysPassed = currentDayIndex + 1;
-    const daysRemaining = totalDays - daysPassed;
-
-    let html = '<div class="stats-grid">';
-    html += `
-        <div class="stat-item">
-            <span>Tasks Completed:</span>
-            <span class="stat-value">${completedTasks}</span>
-        </div>
-        <div class="stat-item">
-            <span>Days Passed:</span>
-            <span class="stat-value">${daysPassed} / ${totalDays}</span>
-        </div>
-        <div class="stat-item">
-            <span>Days Remaining:</span>
-            <span class="stat-value">${daysRemaining}</span>
-        </div>
-        <div class="stat-item">
-            <span>Current Week:</span>
-            <span class="stat-value">Week ${currentWeekIndex}</span>
-        </div>
-    `;
-    html += '</div>';
-
-    container.innerHTML = html;
-}
-
-function updateProgressRing() {
-    const progress = getProgress();
-    const completedCount = Object.values(progress).filter(v => v === true).length;
-    const totalCount = Object.keys(progress).length || 1;
-    const percentage = Math.round((completedCount / totalCount) * 100);
-
-    const circle = document.getElementById('progressCircle');
-    const percentText = document.getElementById('progressPercent');
-
-    if (circle && percentText) {
-        const circumference = 2 * Math.PI * 54;
-        const offset = circumference - (percentage / 100) * circumference;
-
-        circle.style.strokeDashoffset = offset;
-        percentText.textContent = percentage + '%';
-    }
-}
-
-function calculateStreaks() {
-    const progress = getProgress();
-    const dailySchedule = gameplanData['Daily Schedule'];
-
-    let currentStreak = 0;
-    let longestStreak = 0;
-    let tempStreak = 0;
-    let completedDays = 0;
-    let totalDays = 0;
-
-    // Calculate streaks by checking if all tasks for a day are completed
-    for (let i = 0; i < dailySchedule.length; i++) {
-        const dayTasks = [
-            `daily_fitness_${i}`,
-            `daily_cardio_${i}`,
-            `daily_instagram_${i}`,
-            `daily_career_${i}`,
-            `daily_mindset_${i}`
-        ];
-
-        const dayCompleted = dayTasks.every(taskId => progress[taskId] === true);
-
-        if (dayCompleted) {
-            tempStreak++;
-            completedDays++;
-            if (i <= currentDayIndex) {
-                currentStreak = tempStreak;
-            }
-        } else {
-            if (tempStreak > longestStreak) {
-                longestStreak = tempStreak;
-            }
-            if (i <= currentDayIndex) {
-                currentStreak = 0;
-            }
-            tempStreak = 0;
+window.nextOnboardingStep = (step) => {
+    if (step === 2) {
+        const name = document.getElementById('fullName').value;
+        const age = document.getElementById('age').value;
+        const gender = document.getElementById('gender').value;
+        if (!name || !age || !gender) {
+            showError('Please fill all fields');
+            return;
         }
+        state.onboardingData = {
+            ...state.onboardingData,
+            fullName: name,
+            age: parseInt(age),
+            gender
+        };
+    }
 
-        if (i <= currentDayIndex) {
-            totalDays++;
+    if (step === 3) {
+        const weight = document.getElementById('currentWeight').value;
+        const height = document.getElementById('height').value;
+        if (!weight || !height) {
+            showError('Please enter weight and height');
+            return;
         }
+        state.onboardingData = {
+            ...state.onboardingData,
+            currentWeight: parseFloat(weight),
+            height: parseInt(height),
+            waist: parseFloat(document.getElementById('waist').value) || null,
+            chest: parseFloat(document.getElementById('chest').value) || null,
+            arms: parseFloat(document.getElementById('arms').value) || null,
+            neck: parseFloat(document.getElementById('neck').value) || null
+        };
     }
-
-    if (tempStreak > longestStreak) {
-        longestStreak = tempStreak;
-    }
-
-    const rate = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
-
-    return {
-        current: currentStreak,
-        longest: longestStreak,
-        rate: rate
-    };
-}
-
-// Daily Schedule
-function loadDailySchedule() {
-    const dailyData = gameplanData['Daily Schedule'][currentDayIndex];
-    const container = document.getElementById('dailyContent');
-    const dateDisplay = document.getElementById('selectedDate');
-
-    if (!dailyData) {
-        container.innerHTML = '<p>No schedule available for this date</p>';
-        return;
-    }
-
-    dateDisplay.textContent = `${dailyData.Date} - ${dailyData.Day} (Week ${dailyData.Week})`;
-
-    const categories = [
-        { id: 'fitness', label: 'Fitness', icon: '💪', value: dailyData.Fitness },
-        { id: 'cardio', label: 'Cardio/Steps', icon: '🏃', value: dailyData['Cardio/Steps'] },
-        { id: 'instagram', label: 'Instagram', icon: '📱', value: dailyData.Instagram },
-        { id: 'career', label: 'Career/Clarity', icon: '💼', value: dailyData['Career/Clarity'] },
-        { id: 'mindset', label: 'Mindset', icon: '🧘', value: dailyData.Mindset }
-    ];
-
-    let html = '';
-    categories.forEach(cat => {
-        const taskId = `daily_${cat.id}_${currentDayIndex}`;
-        const checked = getTaskStatus(taskId) ? 'checked' : '';
-
-        html += `
-            <div class="task-group">
-                <h3><span>${cat.icon}</span> ${cat.label}</h3>
-                <div class="task-item ${checked ? 'completed' : ''}">
-                    <input type="checkbox" id="${taskId}" ${checked}
-                           onchange="toggleTask('${taskId}', this.checked)">
-                    <label for="${taskId}">${cat.value || 'N/A'}</label>
-                </div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html;
-}
-
-function changeDay(direction) {
-    const maxIndex = gameplanData['Daily Schedule'].length - 1;
-    currentDayIndex += direction;
-
-    if (currentDayIndex < 0) currentDayIndex = 0;
-    if (currentDayIndex > maxIndex) currentDayIndex = maxIndex;
-
-    loadDailySchedule();
-}
-
-// Weekly View
-function loadWeeklyView() {
-    const weekData = gameplanData['Week-by-Week'][currentWeekIndex];
-    const container = document.getElementById('weeklyContent');
-    const weekDisplay = document.getElementById('selectedWeek');
-
-    if (!weekData) {
-        container.innerHTML = '<p>No week data available</p>';
-        return;
-    }
-
-    weekDisplay.textContent = `Week ${weekData.Week} - ${weekData.Focus}`;
-
-    const taskId = `week_${currentWeekIndex}`;
-    const checked = getTaskStatus(taskId) ? 'checked' : '';
-
-    let html = `
-        <div class="week-card">
-            <div class="week-header">
-                <h3>Week ${weekData.Week}: ${weekData.Focus}</h3>
-                <p>${weekData.Start} to ${weekData.End}</p>
-            </div>
-            <div class="week-body">
-                <div class="task-item ${checked ? 'completed' : ''}" style="margin-bottom: 20px;">
-                    <input type="checkbox" id="${taskId}" ${checked}
-                           onchange="toggleTask('${taskId}', this.checked)">
-                    <label for="${taskId}"><strong>Mark week as completed</strong></label>
-                </div>
-
-                <div class="week-section">
-                    <h4>💪 Body</h4>
-                    <p>${weekData.Body || 'N/A'}</p>
-                </div>
-
-                <div class="week-section">
-                    <h4>🧘 Mind</h4>
-                    <p>${weekData.Mind || 'N/A'}</p>
-                </div>
-
-                <div class="week-section">
-                    <h4>📱 Instagram</h4>
-                    <p>${weekData.Instagram || 'N/A'}</p>
-                </div>
-
-                <div class="week-section">
-                    <h4>💼 Career</h4>
-                    <p>${weekData.Career || 'N/A'}</p>
-                </div>
-            </div>
-        </div>
-    `;
-
-    container.innerHTML = html;
-}
-
-function changeWeek(direction) {
-    const maxIndex = gameplanData['Week-by-Week'].length - 1;
-    currentWeekIndex += direction;
-
-    if (currentWeekIndex < 0) currentWeekIndex = 0;
-    if (currentWeekIndex > maxIndex) currentWeekIndex = maxIndex;
-
-    loadWeeklyView();
-}
-
-// Gym Program
-function loadGymProgram() {
-    const gymData = gameplanData['Gym Program'];
-    const container = document.getElementById('gymContent');
-
-    if (!gymData || gymData.length === 0) {
-        container.innerHTML = '<p>No gym program data available</p>';
-        return;
-    }
-
-    let html = '<div>';
-    gymData.forEach((exercise, index) => {
-        const taskId = `gym_${index}`;
-        const checked = getTaskStatus(taskId) ? 'checked' : '';
-
-        html += `
-            <div class="exercise-card">
-                <div class="task-item ${checked ? 'completed' : ''}" style="margin-bottom: 15px;">
-                    <input type="checkbox" id="${taskId}" ${checked}
-                           onchange="toggleTask('${taskId}', this.checked)">
-                    <label for="${taskId}"><h4 style="margin: 0;">${exercise.Exercise || 'Exercise'}</h4></label>
-                </div>
-                <div class="exercise-details">
-                    ${exercise.Day ? `<div class="exercise-detail"><strong>Day:</strong> ${exercise.Day}</div>` : ''}
-                    ${exercise.Sets ? `<div class="exercise-detail"><strong>Sets:</strong> ${exercise.Sets}</div>` : ''}
-                    ${exercise.Reps ? `<div class="exercise-detail"><strong>Reps:</strong> ${exercise.Reps}</div>` : ''}
-                    ${exercise.Rest ? `<div class="exercise-detail"><strong>Rest:</strong> ${exercise.Rest}</div>` : ''}
-                    ${exercise.Notes ? `<div class="exercise-detail" style="grid-column: 1 / -1;"><strong>Notes:</strong> ${exercise.Notes}</div>` : ''}
-                </div>
-            </div>
-        `;
-    });
-    html += '</div>';
-
-    container.innerHTML = html;
-}
-
-// Instagram Calendar
-function loadInstagramCalendar() {
-    const igData = gameplanData['IG Calendar'][currentIGIndex];
-    const container = document.getElementById('instagramContent');
-    const dateDisplay = document.getElementById('selectedIGDate');
-
-    if (!igData) {
-        container.innerHTML = '<p>No Instagram content for this date</p>';
-        return;
-    }
-
-    dateDisplay.textContent = `${igData.Date} - ${igData.Day}`;
-
-    const fields = Object.keys(igData).filter(key =>
-        key !== 'Date' && key !== 'Day' && key !== 'Week' && igData[key]
-    );
-
-    let html = '';
-    fields.forEach((field, index) => {
-        const taskId = `ig_${field}_${currentIGIndex}`;
-        const checked = getTaskStatus(taskId) ? 'checked' : '';
-
-        html += `
-            <div class="ig-task">
-                <div class="task-item ${checked ? 'completed' : ''}">
-                    <input type="checkbox" id="${taskId}" ${checked}
-                           onchange="toggleTask('${taskId}', this.checked)">
-                    <label for="${taskId}">
-                        <h4>${field}</h4>
-                        <p>${igData[field]}</p>
-                    </label>
-                </div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html || '<p>No content scheduled</p>';
-}
-
-function changeIGDay(direction) {
-    const maxIndex = gameplanData['IG Calendar'].length - 1;
-    currentIGIndex += direction;
-
-    if (currentIGIndex < 0) currentIGIndex = 0;
-    if (currentIGIndex > maxIndex) currentIGIndex = maxIndex;
-
-    loadInstagramCalendar();
-}
-
-// Habits
-function loadHabits() {
-    const habitsData = gameplanData['Habit Tracker'][currentHabitIndex];
-    const container = document.getElementById('habitsContent');
-    const dateDisplay = document.getElementById('selectedHabitDate');
-
-    if (!habitsData) {
-        container.innerHTML = '<p>No habit data for this date</p>';
-        return;
-    }
-
-    dateDisplay.textContent = `${habitsData.Date} - ${habitsData.Day}`;
-
-    const fields = Object.keys(habitsData).filter(key =>
-        key !== 'Date' && key !== 'Day' && key !== 'Week' && habitsData[key]
-    );
-
-    let html = '';
-    fields.forEach((field) => {
-        const taskId = `habit_${field}_${currentHabitIndex}`;
-        const checked = getTaskStatus(taskId) ? 'checked' : '';
-
-        html += `
-            <div class="task-group">
-                <h3>${field}</h3>
-                <div class="task-item ${checked ? 'completed' : ''}">
-                    <input type="checkbox" id="${taskId}" ${checked}
-                           onchange="toggleTask('${taskId}', this.checked)">
-                    <label for="${taskId}">${habitsData[field]}</label>
-                </div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html || '<p>No habits tracked</p>';
-}
-
-function changeHabitDay(direction) {
-    const maxIndex = gameplanData['Habit Tracker'].length - 1;
-    currentHabitIndex += direction;
-
-    if (currentHabitIndex < 0) currentHabitIndex = 0;
-    if (currentHabitIndex > maxIndex) currentHabitIndex = maxIndex;
-
-    loadHabits();
-}
-
-// Nutrition
-function loadNutrition() {
-    const nutritionData = gameplanData['Nutrition'];
-    const container = document.getElementById('nutritionContent');
-
-    if (!nutritionData || nutritionData.length === 0) {
-        container.innerHTML = '<p>No nutrition data available</p>';
-        return;
-    }
-
-    let html = '';
-    nutritionData.forEach((item, index) => {
-        html += '<div class="nutrition-item">';
-
-        Object.keys(item).forEach(key => {
-            if (item[key]) {
-                html += `
-                    <div style="margin-bottom: 10px;">
-                        <strong>${key}:</strong> ${item[key]}
-                    </div>
-                `;
-            }
-        });
-
-        html += '</div>';
-    });
-
-    container.innerHTML = html;
-}
-
-// Hooks
-function loadHooks() {
-    const hooksData = gameplanData['Hooks'];
-    const container = document.getElementById('hooksContent');
-
-    if (!hooksData || hooksData.length === 0) {
-        container.innerHTML = '<p>No hooks data available</p>';
-        return;
-    }
-
-    let html = '';
-    hooksData.forEach((hook, index) => {
-        const taskId = `hook_${index}`;
-        const checked = getTaskStatus(taskId) ? 'checked' : '';
-
-        html += `
-            <div class="hook-card">
-                <div class="task-item ${checked ? 'completed' : ''}">
-                    <input type="checkbox" id="${taskId}" ${checked}
-                           onchange="toggleTask('${taskId}', this.checked)">
-                    <label for="${taskId}">
-        `;
-
-        Object.keys(hook).forEach(key => {
-            if (hook[key]) {
-                if (key === Object.keys(hook)[0]) {
-                    html += `<h4>${hook[key]}</h4>`;
-                } else {
-                    html += `<p><strong>${key}:</strong> ${hook[key]}</p>`;
-                }
-            }
-        });
-
-        html += `
-                    </label>
-                </div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html;
-}
-
-// Progress Management
-function getProgress() {
-    const stored = localStorage.getItem(STORAGE_KEYS.PROGRESS);
-    return stored ? JSON.parse(stored) : {};
-}
-
-function saveProgress(progress) {
-    localStorage.setItem(STORAGE_KEYS.PROGRESS, JSON.stringify(progress));
-}
-
-function getTaskStatus(taskId) {
-    const progress = getProgress();
-    return progress[taskId] === true;
-}
-
-function toggleTask(taskId, checked) {
-    const progress = getProgress();
-    progress[taskId] = checked;
-    saveProgress(progress);
 
     // Update UI
-    const taskElement = document.getElementById(taskId);
-    if (taskElement) {
-        const taskItem = taskElement.closest('.task-item');
-        if (taskItem) {
-            if (checked) {
-                taskItem.classList.add('completed');
-            } else {
-                taskItem.classList.remove('completed');
-            }
+    for (let i = 1; i <= 4; i++) {
+        document.getElementById(`onboardingStep${i}`).classList.add('hidden');
+        const stepEl = document.querySelector(`.progress-step[data-step="${i}"]`);
+        if (stepEl) {
+            stepEl.classList.remove('active', 'completed');
         }
     }
 
-    // Update dashboard if on dashboard
-    if (currentView === 'dashboard') {
-        updateProgressRing();
-        loadHabitStreak();
-        loadQuickStats();
+    for (let i = 1; i < step; i++) {
+        const stepEl = document.querySelector(`.progress-step[data-step="${i}"]`);
+        if (stepEl) stepEl.classList.add('completed');
     }
-}
 
-// Settings
-function changePin() {
-    const newPin = document.getElementById('newPin').value;
+    document.getElementById(`onboardingStep${step}`).classList.remove('hidden');
+    const activeStep = document.querySelector(`.progress-step[data-step="${step}"]`);
+    if (activeStep) activeStep.classList.add('active');
 
-    if (!newPin || newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
-        alert('Please enter a valid 4-digit PIN');
+    document.getElementById('onboardingProgressBar').style.width = (step / 4) * 100 + '%';
+};
+
+window.prevOnboardingStep = (step) => nextOnboardingStep(step);
+
+window.calculateMetrics = () => {
+    const targetWeight = parseFloat(document.getElementById('targetWeight').value);
+    const weightGoal = document.getElementById('weightGoal').value;
+    const activityLevel = document.getElementById('activityLevel').value;
+
+    if (!targetWeight || !weightGoal || !activityLevel) {
+        showError('Please fill all goal fields');
         return;
     }
 
-    localStorage.setItem(STORAGE_KEYS.PIN, newPin);
-    alert('PIN updated successfully!');
-    document.getElementById('newPin').value = '';
-}
-
-function exportData() {
-    const progress = getProgress();
-    const data = {
-        progress: progress,
-        exportDate: new Date().toISOString(),
-        version: '1.0'
+    state.onboardingData = {
+        ...state.onboardingData,
+        targetWeight,
+        weightGoal,
+        activityLevel
     };
 
-    const dataStr = JSON.stringify(data, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
+    const { currentWeight, height, age, gender } = state.onboardingData;
+    const bmi = FitnessCalculator.calculateBMI(currentWeight, height);
+    const bmr = FitnessCalculator.calculateBMR(currentWeight, height, age, gender);
+    const tdee = FitnessCalculator.calculateTDEE(bmr, activityLevel);
+    const calorieGoal = FitnessCalculator.calculateCalorieGoal(tdee, weightGoal, 0.5);
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `feb1-progress-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
+    state.calculatedMetrics = { bmi, bmr, tdee, calorieGoal };
 
-    URL.revokeObjectURL(url);
-}
+    document.getElementById('bmiValue').textContent = bmi.toFixed(1);
+    document.getElementById('tdeeValue').textContent = tdee + ' cal';
+    document.getElementById('caloriesValue').textContent = calorieGoal.calories + ' cal';
+    document.getElementById('proteinValue').textContent = calorieGoal.protein + 'g';
+    document.getElementById('calculatedMetrics').style.display = 'block';
+    document.getElementById('goToStep4').disabled = false;
+};
 
-function resetProgress() {
-    if (confirm('Are you sure you want to reset all progress? This action cannot be undone.')) {
-        if (confirm('Really sure? All your tracked tasks will be lost!')) {
-            localStorage.removeItem(STORAGE_KEYS.PROGRESS);
-            localStorage.removeItem(STORAGE_KEYS.HABITS);
-            alert('Progress reset successfully');
-            location.reload();
+window.skipOnboarding = () => completeOnboarding(true);
+
+window.completeOnboarding = async (skipPhotos = false) => {
+    try {
+        showLoading();
+        await db.createUserProfile({
+            full_name: state.onboardingData.fullName,
+            start_date: APP_CONFIG.START_DATE,
+            target_date: APP_CONFIG.TARGET_DATE
+        });
+
+        await db.addMeasurement({
+            weight: state.onboardingData.currentWeight,
+            waist: state.onboardingData.waist,
+            chest: state.onboardingData.chest,
+            arms: state.onboardingData.arms,
+            neck: state.onboardingData.neck
+        });
+
+        if (!skipPhotos) {
+            const photos = [
+                { id: 'photoFront', type: 'front' },
+                { id: 'photoSide', type: 'side' },
+                { id: 'photoBack', type: 'back' }
+            ];
+            for (const photo of photos) {
+                const file = document.getElementById(photo.id).files[0];
+                if (file) {
+                    await db.uploadProgressPhoto(file, photo.type, 'Baseline');
+                }
+            }
         }
+
+        await checkAuthState();
+    } catch (error) {
+        console.error('Onboarding error:', error);
+        showError('Setup failed: ' + error.message);
+    } finally {
+        hideLoading();
     }
+};
+
+// =====================================================
+// MAIN APP
+// =====================================================
+
+async function initializeMainApp() {
+    const email = state.user.email;
+    document.getElementById('userEmail').textContent = email;
+    document.getElementById('userAvatar').textContent = email[0].toUpperCase();
+    updateDateCounters();
+    await loadDashboard();
 }
 
-// Allow Enter key for login
-document.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        const loginScreen = document.getElementById('loginScreen');
-        if (loginScreen && !loginScreen.classList.contains('hidden')) {
-            login();
-        }
+function updateDateCounters() {
+    const daysElapsed = DateUtils.getDaysSince(APP_CONFIG.START_DATE);
+    const daysRemaining = DateUtils.getDaysUntil(APP_CONFIG.TARGET_DATE);
+    const currentWeek = DateUtils.getWeekNumber(state.currentDate);
+
+    document.getElementById('daysElapsed').textContent = daysElapsed;
+    document.getElementById('daysRemaining').textContent = daysRemaining;
+    document.getElementById('currentWeek').textContent = currentWeek;
+    state.currentWeek = currentWeek;
+    document.getElementById('todayDate').textContent = DateUtils.formatDisplayDate(new Date());
+}
+
+window.switchView = async (viewName) => {
+    state.currentView = viewName;
+
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    const navItem = document.querySelector(`[data-view="${viewName}"]`);
+    if (navItem) navItem.classList.add('active');
+
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    const view = document.getElementById(`${viewName}View`);
+    if (view) view.classList.add('active');
+
+    try {
+        showLoading();
+        const loadFunctions = {
+            dashboard: loadDashboard,
+            daily: loadDaily,
+            weekly: loadWeekly,
+            gym: loadGym,
+            progress: loadProgress,
+            journal: loadJournal,
+            instagram: loadInstagram,
+            nutrition: loadNutrition
+        };
+
+        const loadFn = loadFunctions[viewName];
+        if (loadFn) await loadFn();
+    } catch (error) {
+        console.error(`Load error:`, error);
+        showError(`Failed to load ${viewName}`);
+    } finally {
+        hideLoading();
+    }
+};
+
+window.toggleUserMenu = () => {
+    document.getElementById('userDropdown')?.classList.toggle('hidden');
+};
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.user-menu')) {
+        document.getElementById('userDropdown')?.classList.add('hidden');
     }
 });
+
+// =====================================================
+// DASHBOARD WITH AI
+// =====================================================
+
+async function loadDashboard() {
+    const completions = await db.getDailyCompletions(state.currentDate);
+    const totalTasks = 5;
+    const completedTasks = completions.filter(c => c.completed).length;
+    const completionPercentage = ProgressCalculator.calculatePercentage(completedTasks, totalTasks);
+
+    document.getElementById('completionRate').textContent = completionPercentage + '%';
+    document.getElementById('completionBar').style.width = completionPercentage + '%';
+
+    const streaks = await db.getAllHabitStreaks();
+    const maxStreak = streaks.length > 0 ? Math.max(...streaks.map(s => s.current_streak)) : 0;
+    document.getElementById('currentStreak').textContent = maxStreak;
+
+    const measurements = await db.getMeasurements(7);
+    if (measurements.length > 0) {
+        const latest = measurements[0];
+        document.getElementById('weightProgress').textContent = latest.weight.toFixed(1) + ' kg';
+
+        if (measurements.length > 1) {
+            const previous = measurements[1];
+            const change = latest.weight - previous.weight;
+            const changeEl = document.getElementById('weightChange');
+            changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(1) + ' kg';
+            changeEl.classList.remove('positive', 'negative');
+            changeEl.classList.add(change < 0 ? 'positive' : 'negative');
+        }
+    } else {
+        document.getElementById('weightProgress').textContent = '-';
+        document.getElementById('weightChange').textContent = 'No data';
+    }
+
+    await loadTodayTasks();
+
+    // Load AI motivation
+    const dayNumber = DateUtils.getDaysSince(APP_CONFIG.START_DATE) + 1;
+    try {
+        const motivation = await getAIMotivation({ dayNumber, streak: maxStreak });
+        const motivationEl = document.getElementById('aiMotivation');
+        if (motivationEl) {
+            motivationEl.textContent = motivation;
+        }
+    } catch (err) {
+        console.error('AI error:', err);
+    }
+}
+
+async function loadTodayTasks() {
+    const container = document.getElementById('todayTasks');
+    if (!container) return;
+
+    const dailySchedule = window.gameplanData?.['Daily Schedule'] || [];
+    const todayData = dailySchedule.find(day => day.Date === state.currentDate);
+
+    if (!todayData) {
+        container.innerHTML = '<div class="empty-state"><p>No tasks scheduled for today</p></div>';
+        return;
+    }
+
+    const completions = await db.getDailyCompletions(state.currentDate);
+    const tasks = [
+        { id: 'fitness', label: 'Fitness', icon: '💪', value: todayData.Fitness },
+        { id: 'cardio', label: 'Cardio/Steps', icon: '🏃', value: todayData['Cardio/Steps'] },
+        { id: 'instagram', label: 'Instagram', icon: '📱', value: todayData.Instagram },
+        { id: 'career', label: 'Career', icon: '💼', value: todayData['Career/Clarity'] },
+        { id: 'mindset', label: 'Mindset', icon: '🧘', value: todayData.Mindset }
+    ];
+
+    let html = '<ul class="task-list">';
+    for (const task of tasks) {
+        const completion = completions.find(c => c.task_id === task.id);
+        const checked = completion?.completed || false;
+
+        html += `
+            <li class="task-item ${checked ? 'completed' : ''}">
+                <input type="checkbox"
+                       class="task-checkbox"
+                       ${checked ? 'checked' : ''}
+                       onchange="toggleTask('${state.currentDate}', 'daily', '${task.id}', this.checked)">
+                <div class="task-content">
+                    <div class="task-title">${task.icon} ${task.label}</div>
+                    <div class="task-description">${task.value || 'N/A'}</div>
+                </div>
+            </li>`;
+    }
+    html += '</ul>';
+
+    container.innerHTML = html;
+}
+
+window.toggleTask = async (date, category, taskId, completed) => {
+    try {
+        await db.toggleTaskCompletion(date, category, taskId, completed);
+        await db.updateHabitStreak(taskId, completed, date);
+
+        if (state.currentView === 'dashboard') {
+            await loadDashboard();
+        } else if (state.currentView === 'daily') {
+            await loadDaily();
+        }
+    } catch (error) {
+        console.error('Toggle task error:', error);
+        showError('Failed to update task');
+    }
+};
+
+// =====================================================
+// DAILY VIEW
+// =====================================================
+
+window.changeDate = (delta) => {
+    if (delta === 0) {
+        state.currentDate = DateUtils.getToday();
+    } else {
+        state.currentDate = DateUtils.addDays(state.currentDate, delta);
+    }
+    loadDaily();
+};
+
+async function loadDaily() {
+    const dailySchedule = window.gameplanData?.['Daily Schedule'] || [];
+    const dayData = dailySchedule.find(day => day.Date === state.currentDate);
+
+    document.getElementById('selectedDate').textContent = DateUtils.formatDisplayDate(state.currentDate);
+
+    const container = document.getElementById('dailyContent');
+    if (!container) return;
+
+    if (!dayData) {
+        container.innerHTML = '<div class="empty-state"><p>No schedule for this date</p></div>';
+        return;
+    }
+
+    const isFuture = DateUtils.isFuture(state.currentDate);
+    const completions = await db.getDailyCompletions(state.currentDate);
+
+    const categories = [
+        { id: 'fitness', label: 'Fitness', icon: '💪', value: dayData.Fitness },
+        { id: 'cardio', label: 'Cardio', icon: '🏃', value: dayData['Cardio/Steps'] },
+        { id: 'instagram', label: 'Instagram', icon: '📱', value: dayData.Instagram },
+        { id: 'career', label: 'Career', icon: '💼', value: dayData['Career/Clarity'] },
+        { id: 'mindset', label: 'Mindset', icon: '🧘', value: dayData.Mindset }
+    ];
+
+    let html = '';
+    for (const cat of categories) {
+        const completion = completions.find(c => c.task_id === cat.id);
+        const checked = completion?.completed || false;
+
+        html += `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">${cat.icon} ${cat.label}</h3>
+                </div>
+                <div class="card-body">
+                    <div class="task-item ${checked ? 'completed' : ''}">
+                        <input type="checkbox"
+                               class="task-checkbox"
+                               ${checked ? 'checked' : ''}
+                               ${isFuture ? 'disabled' : ''}
+                               onchange="toggleTask('${state.currentDate}', 'daily', '${cat.id}', this.checked)">
+                        <div class="task-content">
+                            <div class="task-description">${cat.value || 'No task scheduled'}</div>
+                        </div>
+                    </div>
+                    ${isFuture ? '<p class="form-help">⚠️ Cannot check off future tasks</p>' : ''}
+                </div>
+            </div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// =====================================================
+// WEEKLY VIEW
+// =====================================================
+
+async function loadWeekly() {
+    const weekData = window.gameplanData?.['Week-by-Week'] || [];
+    const container = document.getElementById('weeklyContent');
+    if (!container) return;
+
+    let html = '';
+    for (const week of weekData) {
+        const isCurrent = week.Week === state.currentWeek;
+
+        html += `
+            <div class="card">
+                <div class="card-header">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="card-title">Week ${week.Week}: ${week.Focus}</h3>
+                            <p class="card-subtitle">${week.Start} to ${week.End}</p>
+                        </div>
+                        ${isCurrent ? '<span class="badge badge-primary">Current Week</span>' : ''}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="grid grid-cols-2">
+                        <div>
+                            <h4 style="margin-bottom: var(--space-2); color: var(--primary);">💪 Body</h4>
+                            <p style="font-size: var(--text-sm);">${week.Body}</p>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: var(--space-2); color: var(--primary);">🧘 Mind</h4>
+                            <p style="font-size: var(--text-sm);">${week.Mind}</p>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: var(--space-2); color: var(--primary);">📱 Instagram</h4>
+                            <p style="font-size: var(--text-sm);">${week.Instagram}</p>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: var(--space-2); color: var(--primary);">💼 Career</h4>
+                            <p style="font-size: var(--text-sm);">${week.Career}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// =====================================================
+// GYM VIEW - ORGANIZED BY DAY WITH AI TIPS
+// =====================================================
+
+async function loadGym() {
+    const container = document.getElementById('gymContent');
+    if (!container) return;
+
+    const dayOfWeek = new Date(state.currentDate).toLocaleDateString('en-US', { weekday: 'long' });
+    const todaysWorkout = getTodaysWorkout(dayOfWeek);
+
+    let html = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">💪 ${todaysWorkout.type}</h3>
+                <p class="card-subtitle">${dayOfWeek}, ${state.currentDate}</p>
+            </div>
+            <div class="card-body">`;
+
+    if (todaysWorkout.exercises.length === 0) {
+        html += '<p>🌴 Rest day - Recovery is part of the plan!</p>';
+    } else {
+        for (const ex of todaysWorkout.exercises) {
+            html += `
+                <div style="margin-bottom: var(--space-4); padding: var(--space-4); background: var(--bg-tertiary); border-radius: var(--radius);">
+                    <h4 style="margin-bottom: var(--space-2);">${ex.exercise}</h4>
+                    <div class="grid grid-cols-3" style="gap: var(--space-2); margin-bottom: var(--space-2);">
+                        <div><strong>Sets:</strong> ${ex.sets}</div>
+                        <div><strong>Reps:</strong> ${ex.reps}</div>
+                        <div><strong>Rest:</strong> ${ex.rest}</div>
+                    </div>
+                    <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-2);">
+                        💡 ${ex.notes}
+                    </p>
+                    <button onclick="logExercise('${ex.exercise.replace(/'/g, "\\'")}')"
+                            class="btn btn-sm btn-primary">
+                        Log This Exercise
+                    </button>
+                </div>`;
+        }
+    }
+
+    html += '</div></div>';
+
+    // Weekly schedule overview
+    html += `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📅 Weekly Split</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2">`;
+
+    for (const [day, workout] of Object.entries(WEEKLY_SCHEDULE)) {
+        const isToday = day === dayOfWeek;
+        html += `
+            <div class="badge ${isToday ? 'badge-primary' : 'badge-gray'}"
+                 style="padding: var(--space-3); margin: var(--space-1);">
+                <strong>${day}:</strong> ${workout}
+            </div>`;
+    }
+
+    html += '</div></div></div>';
+
+    container.innerHTML = html;
+}
+
+window.logExercise = async (exerciseName) => {
+    const sets = prompt('How many sets did you complete?');
+    if (!sets) return;
+
+    const reps = prompt('Reps per set (comma separated, e.g., 10,10,12):');
+    if (!reps) return;
+
+    const weight = prompt('Weight used (kg):');
+
+    try {
+        showLoading();
+        await db.addGymLog({
+            workout_date: state.currentDate,
+            exercise_name: exerciseName,
+            sets_completed: parseInt(sets),
+            reps_completed: reps.split(',').map(r => parseInt(r.trim())),
+            weight_used: weight ? [parseFloat(weight)] : [],
+            notes: ''
+        });
+        alert('💪 Workout logged successfully!');
+        await loadGym();
+    } catch (error) {
+        console.error('Log workout error:', error);
+        showError('Failed to log workout');
+    } finally {
+        hideLoading();
+    }
+};
+
+// =====================================================
+// NUTRITION - ORGANIZED BY MEAL TYPE
+// =====================================================
+
+async function loadNutrition() {
+    const container = document.getElementById('nutritionContent');
+    if (!container) return;
+
+    const mealPlan = getDailyMealPlan(state.calculatedMetrics?.calorieGoal);
+
+    let html = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">🎯 Daily Nutrition Goals</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-4">
+                    <div class="stat-card">
+                        <div class="stat-label">Calories</div>
+                        <div class="stat-value">${mealPlan.goals.calories}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Protein</div>
+                        <div class="stat-value">${mealPlan.goals.protein}g</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Carbs</div>
+                        <div class="stat-value">${mealPlan.goals.carbs}g</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Fats</div>
+                        <div class="stat-value">${mealPlan.goals.fats}g</div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+    for (const [key, meal] of Object.entries(MEAL_PLAN_TEMPLATE)) {
+        html += `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">${meal.icon} ${meal.name}</h3>
+                    <p class="card-subtitle">${meal.timeRange}</p>
+                </div>
+                <div class="card-body">`;
+
+        for (const option of meal.options) {
+            html += `
+                <div style="margin-bottom: var(--space-4); padding: var(--space-3); background: var(--bg-tertiary); border-radius: var(--radius);">
+                    <h4>${option.name}</h4>
+                    <ul style="margin: var(--space-2) 0; padding-left: var(--space-5);">
+                        ${option.foods.map(f => `<li>${f}</li>`).join('')}
+                    </ul>
+                    <div class="grid grid-cols-4" style="gap: var(--space-2); font-size: var(--text-sm);">
+                        <div><strong>Calories:</strong> ${option.macros.calories}</div>
+                        <div><strong>Protein:</strong> ${option.macros.protein}g</div>
+                        <div><strong>Carbs:</strong> ${option.macros.carbs}g</div>
+                        <div><strong>Fats:</strong> ${option.macros.fats}g</div>
+                    </div>
+                </div>`;
+        }
+
+        html += '</div></div>';
+    }
+
+    container.innerHTML = html;
+}
+
+// =====================================================
+// OTHER VIEWS
+// =====================================================
+
+async function loadProgress() {
+    const container = document.getElementById('progressContent');
+    if (!container) return;
+
+    const photos = await db.getProgressPhotos(20);
+
+    let html = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📸 Progress Photos</h3>
+            </div>
+            <div class="card-body">`;
+
+    if (photos.length === 0) {
+        html += '<p>No photos yet. Upload your first progress photo to track your transformation!</p>';
+    } else {
+        html += '<div class="grid grid-cols-3">';
+        for (const photo of photos) {
+            html += `
+                <div>
+                    <img src="${photo.photo_url}"
+                         alt="${photo.photo_type}"
+                         style="width:100%; border-radius: var(--radius); aspect-ratio: 1;">
+                    <p style="text-align:center; font-size: var(--text-sm); margin-top: var(--space-2);">
+                        ${photo.photo_type} - ${new Date(photo.taken_at).toLocaleDateString()}
+                    </p>
+                </div>`;
+        }
+        html += '</div>';
+    }
+
+    html += '</div></div>';
+    container.innerHTML = html;
+}
+
+async function loadJournal() {
+    const container = document.getElementById('journalContent');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📝 Daily Journal</h3>
+            </div>
+            <div class="card-body">
+                <p>Journal feature coming soon...</p>
+            </div>
+        </div>`;
+}
+
+async function loadInstagram() {
+    const container = document.getElementById('instagramContent');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📱 Instagram Content Tracker</h3>
+            </div>
+            <div class="card-body">
+                <p>Instagram tracking coming soon...</p>
+            </div>
+        </div>`;
+}
+
+// =====================================================
+// LOAD GAMEPLAN DATA
+// =====================================================
+
+try {
+    const module = await import('./data.js');
+    window.gameplanData = module.gameplanData || {};
+} catch (err) {
+    console.error('Failed to load gameplan data:', err);
+    window.gameplanData = {};
+}
