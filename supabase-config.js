@@ -20,8 +20,8 @@ export const STORAGE_BUCKETS = {
 
 // App Constants
 export const APP_CONFIG = {
-  START_DATE: '2025-10-23',
+  START_DATE: '2025-10-25', // TODAY - Actual start date
   TARGET_DATE: '2026-02-01',
   APP_NAME: 'Feb 1 Game Plan',
-  VERSION: '2.0'
+  VERSION: '2.1' // Upgraded version with fixes
 };
