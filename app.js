@@ -11,6 +11,10 @@ import { APP_CONFIG } from './supabase-config.js';
 import { getTodaysWorkout, WEEKLY_SCHEDULE } from './workout-program.js';
 import { getDailyMealPlan, MEAL_PLAN_TEMPLATE } from './nutrition-plan.js';
 import { getAIMotivation, getWorkoutAdvice, analyzeProgress } from './deepseek-ai.js';
+import gameplanData from './data.js';
+
+// Make gameplanData available globally
+window.gameplanData = gameplanData;
 
 const state = {
     currentView: 'dashboard',

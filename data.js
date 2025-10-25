@@ -2505,3 +2505,11 @@ const gameplanData = {
     }
   ]
 };
+
+// Export to window for app.js access
+if (typeof window !== 'undefined') {
+  window.gameplanData = gameplanData;
+}
+
+// Also export as ES module
+export default gameplanData;
