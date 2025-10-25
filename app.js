@@ -16,6 +16,13 @@ import gameplanData from './data.js';
 // Make gameplanData available globally
 window.gameplanData = gameplanData;
 
+// DEBUG: Verify data loaded
+console.log('=== APP INITIALIZATION ===');
+console.log('gameplanData loaded?', !!gameplanData);
+console.log('gameplanData keys:', Object.keys(gameplanData || {}));
+console.log('Daily Schedule items:', gameplanData?.['Daily Schedule']?.length || 0);
+console.log('Week-by-Week items:', gameplanData?.['Week-by-Week']?.length || 0);
+
 const state = {
     currentView: 'dashboard',
     currentDate: DateUtils.getToday(),
@@ -509,7 +516,18 @@ window.changeDate = (delta) => {
 
 async function loadDaily() {
     const dailySchedule = window.gameplanData?.['Daily Schedule'] || [];
+
+    // DEBUG: Log what we're working with
+    console.log('=== DEBUG loadDaily ===');
+    console.log('Current date:', state.currentDate);
+    console.log('gameplanData exists?', !!window.gameplanData);
+    console.log('Daily Schedule exists?', !!window.gameplanData?.['Daily Schedule']);
+    console.log('Daily Schedule length:', dailySchedule.length);
+    console.log('First few dates:', dailySchedule.slice(0, 3).map(d => d.Date));
+
     const dayData = dailySchedule.find(day => day.Date === state.currentDate);
+    console.log('Found dayData?', !!dayData);
+    console.log('dayData:', dayData);
 
     document.getElementById('selectedDate').textContent = DateUtils.formatDisplayDate(state.currentDate);
 
@@ -517,7 +535,11 @@ async function loadDaily() {
     if (!container) return;
 
     if (!dayData) {
-        container.innerHTML = '<div class="empty-state"><p>No schedule for this date</p></div>';
+        container.innerHTML = `<div class="empty-state">
+            <p>No schedule for this date</p>
+            <p style="font-size: 12px; color: #666;">Looking for: ${state.currentDate}</p>
+            <p style="font-size: 12px; color: #666;">Available dates: ${dailySchedule.slice(0, 5).map(d => d.Date).join(', ')}</p>
+        </div>`;
         return;
     }
 
