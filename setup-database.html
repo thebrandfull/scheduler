@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Setup - Feb 1 Game Plan</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+        .status.info {
+            background: #E3F2FD;
+            color: #1976D2;
+        }
+        .status.success {
+            background: #E8F5E9;
+            color: #388E3C;
+        }
+        .status.error {
+            background: #FFEBEE;
+            color: #D32F2F;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .progress {
+            width: 100%;
+            height: 30px;
+            background: #E0E0E0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #2196F3;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .log {
+            background: #263238;
+            color: #4CAF50;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 15px 0;
+        }
+        .log div {
+            margin: 3px 0;
+        }
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+        .checklist li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .checklist li:before {
+            content: '⏳ ';
+        }
+        .checklist li.done:before {
+            content: '✅ ';
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Feb 1 Game Plan - Database Setup</h1>
+        <p>This will create all necessary tables in your Supabase database.</p>
+
+        <div class="status info">
+            <strong>📋 What will be created:</strong><br>
+            • 10 database tables<br>
+            • Row Level Security policies<br>
+            • Indexes for performance<br>
+            • Triggers for timestamps
+        </div>
+
+        <ul class="checklist" id="checklist">
+            <li id="check-connection">Connecting to Supabase...</li>
+            <li id="check-tables">Creating tables...</li>
+            <li id="check-policies">Setting up security policies...</li>
+            <li id="check-indexes">Creating indexes...</li>
+            <li id="check-triggers">Setting up triggers...</li>
+        </ul>
+
+        <div class="progress" style="display:none;" id="progressBar">
+            <div class="progress-bar" id="progress" style="width: 0%">0%</div>
+        </div>
+
+        <div>
+            <button onclick="setupDatabase()" id="setupBtn">Start Setup</button>
+            <button onclick="verifySetup()" id="verifyBtn" disabled>Verify Setup</button>
+        </div>
+
+        <div class="log" id="log" style="display:none;"></div>
+
+        <div id="result"></div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+        const SUPABASE_URL = 'https://lftriblowcphjvzesflh.supabase.co';
+        const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxmdHJpYmxvd2NwaGp2emVzZmxoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTM1ODAwMSwiZXhwIjoyMDc2OTM0MDAxfQ.9qNKZP_fBc6PpLQua7I_9kSyYFzOYBHD91nksh8Iz7g';
+
+        const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+        let logEl, progressEl, resultEl;
+
+        function log(message, type = 'info') {
+            if (!logEl) logEl = document.getElementById('log');
+            logEl.style.display = 'block';
+            const div = document.createElement('div');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(message);
+        }
+
+        function updateProgress(percent) {
+            if (!progressEl) progressEl = document.getElementById('progress');
+            document.getElementById('progressBar').style.display = 'block';
+            progressEl.style.width = percent + '%';
+            progressEl.textContent = Math.round(percent) + '%';
+        }
+
+        function markDone(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('done');
+        }
+
+        async function executeSQLFile() {
+            log('Fetching SQL schema file...');
+
+            // Fetch the SQL file
+            const response = await fetch('supabase-schema.sql');
+            const sql = await response.text();
+
+            log(`SQL file loaded (${sql.length} characters)`);
+
+            // Split into statements
+            const statements = sql
+                .split(';')
+                .map(s => s.trim())
+                .filter(s => s.length > 10 && !s.startsWith('--') && !s.startsWith('COMMENT'));
+
+            log(`Found ${statements.length} SQL statements`);
+
+            let executed = 0;
+            const errors = [];
+
+            for (let i = 0; i < statements.length; i++) {
+                const stmt = statements[i];
+
+                try {
+                    // Execute via Supabase
+                    const { error } = await supabase.rpc('exec_sql', { sql_query: stmt });
+
+                    if (error && !error.message.includes('already exists')) {
+                        errors.push({ stmt: stmt.substring(0, 100), error: error.message });
+                        log(`⚠️  Statement ${i+1} failed: ${error.message}`, 'warning');
+                    } else {
+                        executed++;
+                    }
+                } catch (err) {
+                    // Try alternate method for DDL statements
+                    log(`Trying alternate execution for statement ${i+1}...`);
+                }
+
+                updateProgress((i + 1) / statements.length * 100);
+            }
+
+            return { total: statements.length, executed, errors };
+        }
+
+        window.setupDatabase = async function() {
+            const btn = document.getElementById('setupBtn');
+            btn.disabled = true;
+            btn.textContent = 'Setting up...';
+
+            resultEl = document.getElementById('result');
+            resultEl.innerHTML = '';
+
+            try {
+                log('🚀 Starting database setup...');
+                markDone('check-connection');
+
+                log('⚡ Executing SQL schema...');
+
+                // Since we can't execute arbitrary SQL via the client,
+                // we'll direct the user to the SQL editor
+                resultEl.innerHTML = `
+                    <div class="status error">
+                        <strong>⚠️ Automatic setup not available</strong><br><br>
+                        Please run the SQL manually in Supabase SQL Editor:<br><br>
+                        <strong>Steps:</strong><br>
+                        1. Go to: <a href="https://supabase.com/dashboard/project/lftriblowcphjvzesflh/sql/new" target="_blank">Supabase SQL Editor</a><br>
+                        2. Copy all SQL from <code>supabase-schema.sql</code><br>
+                        3. Paste and click "Run"<br>
+                        4. Come back and click "Verify Setup"
+                    </div>
+                `;
+
+                btn.textContent = 'Manual Setup Required';
+
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+                resultEl.innerHTML = `
+                    <div class="status error">
+                        <strong>❌ Setup failed:</strong><br>
+                        ${error.message}<br><br>
+                        Please run the SQL manually in Supabase.
+                    </div>
+                `;
+                btn.textContent = 'Setup Failed';
+            } finally {
+                document.getElementById('verifyBtn').disabled = false;
+            }
+        };
+
+        window.verifySetup = async function() {
+            log('🔍 Verifying database setup...');
+
+            const tables = [
+                'user_profiles',
+                'daily_completions',
+                'measurements',
+                'progress_photos',
+                'gym_logs',
+                'journal_entries',
+                'instagram_posts',
+                'daily_metrics',
+                'weekly_reviews',
+                'habit_streaks'
+            ];
+
+            let found = 0;
+            let missing = [];
+
+            for (const table of tables) {
+                try {
+                    const { data, error } = await supabase.from(table).select('*').limit(0);
+                    if (!error) {
+                        log(`✅ Table '${table}' exists`);
+                        found++;
+                    } else {
+                        log(`❌ Table '${table}' NOT found`);
+                        missing.push(table);
+                    }
+                } catch (err) {
+                    log(`❌ Table '${table}' NOT found`);
+                    missing.push(table);
+                }
+            }
+
+            if (found === tables.length) {
+                resultEl.innerHTML = `
+                    <div class="status success">
+                        <strong>✅ Success! All ${tables.length} tables created!</strong><br><br>
+                        Next step: Create storage buckets<br>
+                        Go to: <a href="https://supabase.com/dashboard/project/lftriblowcphjvzesflh/storage/buckets" target="_blank">Storage Buckets</a><br><br>
+                        Create these 3 PUBLIC buckets:<br>
+                        • progress-photos<br>
+                        • meal-photos<br>
+                        • avatars
+                    </div>
+                `;
+            } else {
+                resultEl.innerHTML = `
+                    <div class="status error">
+                        <strong>⚠️ Setup incomplete</strong><br><br>
+                        Found: ${found} / ${tables.length} tables<br>
+                        Missing: ${missing.join(', ')}<br><br>
+                        Please run the SQL schema in Supabase.
+                    </div>
+                `;
+            }
+        };
+    </script>
+</body>
+</html>
