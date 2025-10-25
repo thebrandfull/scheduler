@@ -28,6 +28,9 @@ CREATE TABLE user_profiles (
   age INTEGER,
   gender TEXT,
   activity_level TEXT,
+  start_date DATE DEFAULT '2025-10-25',
+  target_date DATE DEFAULT '2026-02-01',
+  timezone TEXT DEFAULT 'UTC',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
