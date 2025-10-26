@@ -1,6 +1,6 @@
 # ⚡ QUICK SETUP - 2 Minutes
 
-## Step 1: Create Database Tables (1 minute)
+## Step 1: Create Database Tables (2 minutes)
 
 1. **Open this link**: https://supabase.com/dashboard/project/lftriblowcphjvzesflh/sql/new
 
@@ -11,6 +11,12 @@
 3. **Paste into SQL Editor** and click **"Run"**
 
 4. **You should see**: "Success. No rows returned"
+
+5. **Now add AI features**: Copy ALL the SQL from `supabase-ai-features.sql` file
+
+6. **Paste into SQL Editor** and click **"Run"** again
+
+7. **You should see**: "Success. No rows returned" (this adds achievements, XP, streaks, and AI caching)
 
 ## Step 2: Create Storage Buckets (1 minute)
 

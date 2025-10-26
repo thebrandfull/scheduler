@@ -178,6 +178,21 @@ class SupabaseClient {
         return data;
     }
 
+    async getAllCompletions() {
+        const user = await this.getCurrentUser();
+        if (!user) return [];
+
+        const { data, error } = await this.supabase
+            .from('daily_completions')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('completed', true)
+            .order('task_date', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    }
+
     // =====================================================
     // MEASUREMENTS - Direct DB
     // =====================================================

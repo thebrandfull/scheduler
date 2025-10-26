@@ -12,6 +12,8 @@ import { getTodaysWorkout, WEEKLY_SCHEDULE } from './workout-program.js';
 import { getDailyMealPlan, MEAL_PLAN_TEMPLATE } from './nutrition-plan.js';
 import { getAIMotivation, getWorkoutAdvice, analyzeProgress } from './deepseek-ai.js';
 import gameplanData from './data.js';
+import { XP_VALUES, checkAchievementUnlock, calculateStreakFromCompletions } from './achievements.js';
+import * as AIUI from './ai-ui.js';
 
 // Make gameplanData available globally
 window.gameplanData = gameplanData;
@@ -427,19 +429,55 @@ async function loadDashboard() {
         document.getElementById('weightChange').textContent = 'No data';
     }
 
-    await loadTodayTasks();
-
-    // Load AI motivation
+    // ===== NEW AI FEATURES =====
     const dayNumber = DateUtils.getDaysSince(APP_CONFIG.START_DATE) + 1;
+    const userAchievements = await db.getUserAchievements();
+    const userStats = await db.getUserStats();
+
+    // Morning Briefing
     try {
-        const motivation = await getAIMotivation({ dayNumber, streak: maxStreak });
-        const motivationEl = document.getElementById('aiMotivation');
-        if (motivationEl) {
-            motivationEl.textContent = motivation;
-        }
+        const briefingHTML = await AIUI.renderMorningBriefing({
+            dayNumber,
+            totalDays: 102,
+            currentStreak: maxStreak,
+            weeklyCompletionRate: completionPercentage,
+            recentAchievements: userAchievements.slice(0, 3).map(a => a.achievement_key),
+            todaysTasks: ['Fitness', 'Instagram', 'Career']
+        });
+        const briefingEl = document.getElementById('aiMorningBriefing');
+        if (briefingEl) briefingEl.innerHTML = briefingHTML;
     } catch (err) {
-        console.error('AI error:', err);
+        console.error('AI briefing error:', err);
     }
+
+    // Level Progress
+    try {
+        const levelHTML = await AIUI.renderLevelProgress();
+        const levelEl = document.getElementById('aiLevelProgress');
+        if (levelEl) levelEl.innerHTML = levelHTML;
+    } catch (err) {
+        console.error('Level progress error:', err);
+    }
+
+    // Streak Tracker
+    try {
+        const streakHTML = await AIUI.renderStreakTracker();
+        const streakEl = document.getElementById('aiStreakTracker');
+        if (streakEl) streakEl.innerHTML = streakHTML;
+    } catch (err) {
+        console.error('Streak tracker error:', err);
+    }
+
+    // Achievements
+    try {
+        const achievementsHTML = await AIUI.renderAchievements();
+        const achievementsEl = document.getElementById('aiAchievements');
+        if (achievementsEl) achievementsEl.innerHTML = achievementsHTML;
+    } catch (err) {
+        console.error('Achievements error:', err);
+    }
+
+    await loadTodayTasks();
 }
 
 async function loadTodayTasks() {
@@ -489,6 +527,49 @@ window.toggleTask = async (date, category, taskId, completed) => {
     try {
         await db.toggleTaskCompletion(date, category, taskId, completed);
         await db.updateHabitStreak(taskId, completed, date);
+
+        // Award XP and check achievements when completing tasks
+        if (completed) {
+            try {
+                // Award XP for task completion
+                const result = await db.addXP(XP_VALUES.TASK_COMPLETE, 'task');
+
+                // Show XP notification
+                AIUI.showXPNotification(result.xpGained, 'Task Completed', result.leveledUp);
+
+                // Increment tasks completed counter
+                await db.incrementStat('tasks_completed', 1);
+
+                // Get current user progress for achievement checking
+                const completions = await db.getAllCompletions();
+                const userStats = await db.getUserStats();
+                const streaks = await db.getUserStreaks();
+                const currentStreak = streaks.find(s => s.streak_type === 'overall')?.current_streak || 0;
+
+                // Check for potential achievement unlocks
+                const userProgress = {
+                    streak: currentStreak,
+                    tasksCompleted: userStats.tasks_completed,
+                    perfectDays: userStats.perfect_days,
+                    dayNumber: DateUtils.getDaysSince(APP_CONFIG.START_DATE) + 1
+                };
+
+                // Check common achievements that could be unlocked by completing tasks
+                const achievementsToCheck = [
+                    'first_day', 'week_warrior', 'two_week_champion',
+                    'month_master', 'perfect_day', 'transformation_complete'
+                ];
+
+                for (const achievementKey of achievementsToCheck) {
+                    if (checkAchievementUnlock(achievementKey, userProgress)) {
+                        await db.unlockAchievement(achievementKey);
+                    }
+                }
+            } catch (xpError) {
+                console.error('XP/Achievement error:', xpError);
+                // Don't fail the entire toggle if XP fails
+            }
+        }
 
         if (state.currentView === 'dashboard') {
             await loadDashboard();
