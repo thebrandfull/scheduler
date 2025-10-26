@@ -564,6 +564,237 @@ class SupabaseClient {
         return data || [];
     }
 
+    // =====================================================
+    // ACHIEVEMENTS & GAMIFICATION
+    // =====================================================
+
+    async getUserAchievements() {
+        const user = await this.getCurrentUser();
+        if (!user) return [];
+
+        const { data, error } = await this.supabase
+            .from('user_achievements')
+            .select(`
+                *,
+                achievement:achievements(*)
+            `)
+            .eq('user_id', user.id)
+            .order('unlocked_at', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    }
+
+    async unlockAchievement(achievementKey) {
+        const user = await this.getCurrentUser();
+        if (!user) throw new Error('No authenticated user');
+
+        const { data, error} = await this.supabase
+            .from('user_achievements')
+            .insert({
+                user_id: user.id,
+                achievement_key: achievementKey,
+                progress: 100
+            })
+            .select()
+            .single();
+
+        if (error) {
+            if (error.code === '23505') {
+                // Already unlocked, ignore
+                return null;
+            }
+            throw error;
+        }
+
+        return data;
+    }
+
+    async getUserStats() {
+        const user = await this.getCurrentUser();
+        if (!user) return null;
+
+        const { data, error } = await this.supabase
+            .from('user_stats')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No stats yet, create them
+                return await this.initializeUserStats();
+            }
+            throw error;
+        }
+
+        return data;
+    }
+
+    async initializeUserStats() {
+        const user = await this.getCurrentUser();
+        if (!user) throw new Error('No authenticated user');
+
+        const { data, error } = await this.supabase
+            .from('user_stats')
+            .insert({
+                user_id: user.id,
+                total_xp: 0,
+                current_level: 1
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    }
+
+    async addXP(amount, source = 'task') {
+        const user = await this.getCurrentUser();
+        if (!user) throw new Error('No authenticated user');
+
+        // Get current stats
+        const stats = await this.getUserStats();
+
+        // Update XP (level will auto-update via trigger)
+        const { data, error } = await this.supabase
+            .from('user_stats')
+            .update({
+                total_xp: stats.total_xp + amount
+            })
+            .eq('user_id', user.id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Check if leveled up
+        const leveledUp = data.current_level > stats.current_level;
+
+        return { newStats: data, leveledUp, xpGained: amount };
+    }
+
+    async incrementStat(statName, amount = 1) {
+        const user = await this.getCurrentUser();
+        if (!user) throw new Error('No authenticated user');
+
+        const stats = await this.getUserStats();
+
+        const { data, error } = await this.supabase
+            .from('user_stats')
+            .update({
+                [statName]: (stats[statName] || 0) + amount
+            })
+            .eq('user_id', user.id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    }
+
+    async getUserStreaks() {
+        const user = await this.getCurrentUser();
+        if (!user) return [];
+
+        const { data, error } = await this.supabase
+            .from('user_streaks')
+            .select('*')
+            .eq('user_id', user.id);
+
+        if (error) throw error;
+        return data || [];
+    }
+
+    async updateStreak(streakType, currentStreak, lastActivityDate) {
+        const user = await this.getCurrentUser();
+        if (!user) throw new Error('No authenticated user');
+
+        const existing = await this.supabase
+            .from('user_streaks')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('streak_type', streakType)
+            .single();
+
+        const longestStreak = existing.data
+            ? Math.max(existing.data.longest_streak, currentStreak)
+            : currentStreak;
+
+        const { data, error } = await this.supabase
+            .from('user_streaks')
+            .upsert({
+                user_id: user.id,
+                streak_type: streakType,
+                current_streak: currentStreak,
+                longest_streak: longestStreak,
+                last_activity_date: lastActivityDate
+            }, {
+                onConflict: 'user_id,streak_type'
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    }
+
+    // =====================================================
+    // AI CONTEXT & CACHE
+    // =====================================================
+
+    async getAIContext(contextType) {
+        const user = await this.getCurrentUser();
+        if (!user) return null;
+
+        const { data, error } = await this.supabase
+            .from('ai_context')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('context_type', contextType)
+            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data;
+    }
+
+    async saveAIContext(contextType, contextData, aiResponse, expiresInHours = 24) {
+        const user = await this.getCurrentUser();
+        if (!user) throw new Error('No authenticated user');
+
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + expiresInHours);
+
+        const { data, error } = await this.supabase
+            .from('ai_context')
+            .insert({
+                user_id: user.id,
+                context_type: contextType,
+                context_data: contextData,
+                ai_response: aiResponse,
+                expires_at: expiresAt.toISOString()
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    }
+
+    async clearExpiredAIContext() {
+        const user = await this.getCurrentUser();
+        if (!user) return;
+
+        await this.supabase
+            .from('ai_context')
+            .delete()
+            .eq('user_id', user.id)
+            .lt('expires_at', new Date().toISOString());
+    }
+
     isAuthenticated() {
         return this.currentUser !== null;
     }
