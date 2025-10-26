@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS achievements (
 CREATE TABLE IF NOT EXISTS user_achievements (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
-  achievement_key TEXT NOT NULL,
+  achievement_key TEXT REFERENCES achievements(achievement_key) ON DELETE CASCADE NOT NULL,
   unlocked_at TIMESTAMPTZ DEFAULT NOW(),
   progress INTEGER DEFAULT 0,
   UNIQUE(user_id, achievement_key)
