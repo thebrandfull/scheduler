@@ -2,9 +2,18 @@
 -- Run this after the main migration (supabase-migration-reset.sql)
 
 -- =====================================================
+-- DROP EXISTING TABLES (for clean migration)
+-- =====================================================
+DROP TABLE IF EXISTS user_achievements CASCADE;
+DROP TABLE IF EXISTS achievements CASCADE;
+DROP TABLE IF EXISTS user_streaks CASCADE;
+DROP TABLE IF EXISTS user_stats CASCADE;
+DROP TABLE IF EXISTS ai_context CASCADE;
+
+-- =====================================================
 -- ACHIEVEMENTS SYSTEM
 -- =====================================================
-CREATE TABLE IF NOT EXISTS achievements (
+CREATE TABLE achievements (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   achievement_key TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
@@ -17,7 +26,7 @@ CREATE TABLE IF NOT EXISTS achievements (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS user_achievements (
+CREATE TABLE user_achievements (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
   achievement_key TEXT REFERENCES achievements(achievement_key) ON DELETE CASCADE NOT NULL,
@@ -29,7 +38,7 @@ CREATE TABLE IF NOT EXISTS user_achievements (
 -- =====================================================
 -- STREAKS SYSTEM
 -- =====================================================
-CREATE TABLE IF NOT EXISTS user_streaks (
+CREATE TABLE user_streaks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
   streak_type TEXT NOT NULL, -- 'workout', 'journal', 'instagram', 'overall'
@@ -43,7 +52,7 @@ CREATE TABLE IF NOT EXISTS user_streaks (
 -- =====================================================
 -- XP & LEVELS SYSTEM
 -- =====================================================
-CREATE TABLE IF NOT EXISTS user_stats (
+CREATE TABLE user_stats (
   user_id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   total_xp INTEGER DEFAULT 0,
   current_level INTEGER DEFAULT 1,
@@ -61,7 +70,7 @@ CREATE TABLE IF NOT EXISTS user_stats (
 -- =====================================================
 -- AI CONTEXT & CACHE
 -- =====================================================
-CREATE TABLE IF NOT EXISTS ai_context (
+CREATE TABLE ai_context (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
   context_type TEXT NOT NULL, -- 'morning_briefing', 'evening_reflection', 'progress_analysis'
