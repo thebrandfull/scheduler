@@ -446,7 +446,7 @@ async function loadTodayTasks() {
     const container = document.getElementById('todayTasks');
     if (!container) return;
 
-    const dailySchedule = window.gameplanData?.['Daily Schedule'] || [];
+    const dailySchedule = gameplanData?.['Daily Schedule'] || [];
     const todayData = dailySchedule.find(day => day.Date === state.currentDate);
 
     if (!todayData) {
@@ -515,14 +515,14 @@ window.changeDate = (delta) => {
 };
 
 async function loadDaily() {
-    const dailySchedule = window.gameplanData?.['Daily Schedule'] || [];
+    // FIX: Use imported gameplanData directly instead of window reference
+    const dailySchedule = gameplanData?.['Daily Schedule'] || [];
 
     // DEBUG: Log what we're working with
     console.log('=== DEBUG loadDaily ===');
     console.log('Current date:', state.currentDate);
-    console.log('gameplanData exists?', !!window.gameplanData);
-    console.log('Daily Schedule exists?', !!window.gameplanData?.['Daily Schedule']);
-    console.log('Daily Schedule length:', dailySchedule.length);
+    console.log('gameplanData (imported) exists?', !!gameplanData);
+    console.log('Daily Schedule from import length:', dailySchedule.length);
     console.log('First few dates:', dailySchedule.slice(0, 3).map(d => d.Date));
 
     const dayData = dailySchedule.find(day => day.Date === state.currentDate);
@@ -588,7 +588,7 @@ async function loadDaily() {
 // =====================================================
 
 async function loadWeekly() {
-    const weekData = window.gameplanData?.['Week-by-Week'] || [];
+    const weekData = gameplanData?.['Week-by-Week'] || [];
     const container = document.getElementById('weeklyContent');
     if (!container) return;
 
@@ -867,13 +867,7 @@ async function loadInstagram() {
 }
 
 // =====================================================
-// LOAD GAMEPLAN DATA
+// GAMEPLAN DATA
 // =====================================================
-
-try {
-    const module = await import('./data.js');
-    window.gameplanData = module.gameplanData || {};
-} catch (err) {
-    console.error('Failed to load gameplan data:', err);
-    window.gameplanData = {};
-}
+// Data is already loaded via import at top of file
+// No need to dynamically import again
