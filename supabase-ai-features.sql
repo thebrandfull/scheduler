@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS ai_context (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+DROP INDEX IF EXISTS idx_ai_context_user_type;
+DROP INDEX IF EXISTS idx_ai_context_expires;
 CREATE INDEX idx_ai_context_user_type ON ai_context(user_id, context_type);
 CREATE INDEX idx_ai_context_expires ON ai_context(expires_at);
 
@@ -83,6 +85,22 @@ ALTER TABLE user_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_streaks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_context ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Anyone can view achievements" ON achievements;
+DROP POLICY IF EXISTS "Users can view own achievements" ON user_achievements;
+DROP POLICY IF EXISTS "Users can insert own achievements" ON user_achievements;
+DROP POLICY IF EXISTS "Users can update own achievements" ON user_achievements;
+DROP POLICY IF EXISTS "Users can view own streaks" ON user_streaks;
+DROP POLICY IF EXISTS "Users can insert own streaks" ON user_streaks;
+DROP POLICY IF EXISTS "Users can update own streaks" ON user_streaks;
+DROP POLICY IF EXISTS "Users can view own stats" ON user_stats;
+DROP POLICY IF EXISTS "Users can insert own stats" ON user_stats;
+DROP POLICY IF EXISTS "Users can update own stats" ON user_stats;
+DROP POLICY IF EXISTS "Users can view own ai_context" ON ai_context;
+DROP POLICY IF EXISTS "Users can insert own ai_context" ON ai_context;
+DROP POLICY IF EXISTS "Users can update own ai_context" ON ai_context;
+DROP POLICY IF EXISTS "Users can delete own ai_context" ON ai_context;
 
 -- Achievements (public read)
 CREATE POLICY "Anyone can view achievements" ON achievements FOR SELECT USING (true);
@@ -196,6 +214,10 @@ CREATE TRIGGER trigger_update_user_level
 -- =====================================================
 -- INDEXES
 -- =====================================================
+DROP INDEX IF EXISTS idx_user_achievements_user;
+DROP INDEX IF EXISTS idx_user_streaks_user;
+DROP INDEX IF EXISTS idx_achievements_category;
+
 CREATE INDEX idx_user_achievements_user ON user_achievements(user_id);
 CREATE INDEX idx_user_streaks_user ON user_streaks(user_id);
 CREATE INDEX idx_achievements_category ON achievements(category);
